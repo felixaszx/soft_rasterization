@@ -6,18 +6,20 @@ int main(int argc, char** argv)
 {
     using namespace ras;
     Screen screen(1280, 720);
-
-    RingQueue<int> rq(100);
-
-    for (int i = 0; i < 100; i++)
+    std::vector<std::function<void()>> funcs(1000);
+    for (int i = 0; i < 1000; i++)
     {
-        rq.push(i);
-        if (i % 2)
-        {
-            int a = 0;
-            rq.pop(a);
-        }
+        funcs.emplace_back(
+            []()
+            {
+                for (int i = 0; i < 10; i++)
+                {
+                }
+            });
     }
+    AdvanceThreadPool pool(20);
+    pool.add_tasks(funcs, 5);
+    pool.prepare();
     while (screen.run())
     {
     }

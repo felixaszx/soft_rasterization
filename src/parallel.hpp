@@ -50,9 +50,11 @@ namespace ras
     {
       private:
         std::atomic_bool running_ = true;
+        std::atomic_bool manager_free = true;
         std::mutex ready_;
         std::thread manager_;
         std::vector<std::thread> workers_;
+        std::barrier<> worker_begin_;
 
         size_t frequency_ = 10;
         const std::vector<std::function<void()>>* all_tasks_ = nullptr;
@@ -62,7 +64,7 @@ namespace ras
         AdvanceThreadPool(size_t jobs_size);
         ~AdvanceThreadPool();
 
-        void add_tasks(const std::vector<std::function<void()>>& funcs);
+        void add_tasks(const std::vector<std::function<void()>>& funcs, size_t frequency);
         void wait_all();
         bool is_empty();
         void prepare();
