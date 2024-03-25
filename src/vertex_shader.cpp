@@ -10,9 +10,9 @@ namespace ras
         VertexAttributes attributes = {};
         attributes.resize(dc.attributes_.size());
 
-        if (dc.idx_count_ != 0)
+        if (dc.indices_->size() != 0)
         {
-            pos.reserve(dc.idx_count_);
+            pos.reserve(dc.indices_->size());
             for (auto i : *dc.indices_)
             {
                 for (int a = 0; a < dc.attributes_.size(); a++)
@@ -24,8 +24,8 @@ namespace ras
         }
         else
         {
-            pos.reserve(dc.vert_count_);
-            for (int v = 0; v < dc.vert_count_; v++)
+            pos.reserve(dc.attributes_[0]->size());
+            for (int v = 0; v < dc.attributes_[0]->size(); v++)
             {
                 for (int a = 0; a < dc.attributes_.size(); a++)
                 {
