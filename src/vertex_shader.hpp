@@ -3,6 +3,7 @@
 
 #include "shape.hpp"
 #include "draw_call.hpp"
+#include "parallel.hpp"
 
 namespace ras
 {
