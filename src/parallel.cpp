@@ -62,72 +62,70 @@ namespace ras
 
     AdvanceThreadPool::AdvanceThreadPool(size_t jobs_size)
         : worker_begin_(std::thread::hardware_concurrency() + 1),
+          worker_end_(std::thread::hardware_concurrency() + 2),
           manager_(
               [&]()
               {
                   while (true)
                   {
                       ready_.lock();
+                      manager_free_ = false;
+                      worker_begin_.arrive_and_wait();
+
                       if (!running_)
                       {
-                          break;
+                          ready_.unlock();
+                          return;
                       }
 
                       if (all_tasks_)
                       {
-                          manager_free = false;
-                          worker_begin_.arrive_and_wait();
-                          for (size_t f = 0; f < all_tasks_->size(); f += frequency_)
+                          size_t w = 0;
+                          size_t f = 0;
+                          while (w++, w %= jobs_.size(), f < all_tasks_->size())
                           {
-                              size_t ff = 0;
-                              size_t w = 0;
-                              while (f++, ff <= frequency_)
+                              if (jobs_[w].push(all_tasks_->data() + f))
                               {
-                                  if (!jobs_[w].push(all_tasks_->at(f + ff - 1)))
-                                  {
-                                      ff--;
-                                      w++;
-                                      w %= jobs_.size();
-                                  }
+                                  f++;
                               }
-
-                              w++;
-                              w %= jobs_.size();
                           }
                       }
 
                       all_tasks_ = nullptr;
-                      manager_free = true;
-
-                      ready_.unlock();
+                      manager_free_ = true;
+                      worker_end_.arrive_and_wait();
                   }
               })
     {
-        ready_.lock();
+        workers_.reserve(std::thread::hardware_concurrency());
+        jobs_.reserve(std::thread::hardware_concurrency());
 
         for (int i = 0; i < std::thread::hardware_concurrency(); i++)
         {
+            jobs_.emplace_back(jobs_size);
             workers_.emplace_back(
                 [&, i]()
                 {
                     while (true)
                     {
                         worker_begin_.arrive_and_wait();
+
                         if (!running_)
                         {
-                            break;
+                            return;
                         }
 
                         bool test = false;
-                        std::function<void()> func;
-                        while (!manager_free || (test = jobs_[i].pop(func), test))
+                        const std::function<void()>* func = nullptr;
+                        while (test = jobs_[i].pop(func), !manager_free_ || test)
                         {
                             if (test)
                             {
-                                std::cout << 1;
-                                func();
+                                (*func)();
                             }
                         }
+
+                        worker_end_.arrive_and_wait();
                     }
                 });
         }
@@ -135,36 +133,32 @@ namespace ras
 
     AdvanceThreadPool::~AdvanceThreadPool()
     {
-        wait_all();
         running_ = false;
-        prepare();
-        worker_begin_.arrive_and_wait();
-        manager_.join();
+        prepare_and_start();
+        wait_all_workers();
         for (auto& worker : workers_)
         {
             worker.join();
         }
+        manager_.join();
     }
 
-    void AdvanceThreadPool::add_tasks(const std::vector<std::function<void()>>& funcs, size_t frequency)
+    void AdvanceThreadPool::add_tasks(const std::vector<std::function<void()>>& funcs)
     {
-        wait_all();
-        frequency_ = frequency;
         all_tasks_ = &funcs;
     }
 
-    void AdvanceThreadPool::wait_all()
+    void AdvanceThreadPool::wait_all_workers()
     {
-        ready_.lock();
-        std::cout << "K";
+        worker_end_.arrive_and_wait();
     }
 
-    bool AdvanceThreadPool::is_empty()
+    bool AdvanceThreadPool::is_manager_empty()
     {
-        return manager_free;
+        return manager_free_;
     }
 
-    void AdvanceThreadPool::prepare()
+    void AdvanceThreadPool::prepare_and_start()
     {
         ready_.unlock();
     }

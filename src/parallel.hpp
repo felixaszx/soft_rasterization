@@ -5,6 +5,7 @@
 #include <atomic>
 #include <functional>
 #include <thread>
+#include <condition_variable>
 #include <barrier>
 
 namespace ras
@@ -33,7 +34,8 @@ namespace ras
     class RingQueue
     {
       private:
-        std::atomic_size_t size_ = 0;
+        size_t size_ = 0;
+        std::atomic_ref<size_t> atomic_size_;
         std::vector<T> arr_ = {};
         size_t front_ = 0;
         size_t back_ = 0;
@@ -44,44 +46,49 @@ namespace ras
         bool pop(T& target);
         bool push(const T& elem);
         size_t capacity();
+        size_t size() { return size_; }
     };
 
     class AdvanceThreadPool
     {
       private:
         std::atomic_bool running_ = true;
-        std::atomic_bool manager_free = true;
+        std::atomic_bool manager_free_ = true;
+
         std::mutex ready_;
         std::thread manager_;
         std::vector<std::thread> workers_;
         std::barrier<> worker_begin_;
+        std::barrier<> worker_end_;
 
-        size_t frequency_ = 10;
         const std::vector<std::function<void()>>* all_tasks_ = nullptr;
-        std::vector<RingQueue<std::function<void()>>> jobs_;
+        std::vector<RingQueue<const std::function<void()>*>> jobs_;
 
       public:
+        std::atomic_bool enable_sleeping_ = true;
+
         AdvanceThreadPool(size_t jobs_size);
         ~AdvanceThreadPool();
 
-        void add_tasks(const std::vector<std::function<void()>>& funcs, size_t frequency);
-        void wait_all();
-        bool is_empty();
-        void prepare();
+        void add_tasks(const std::vector<std::function<void()>>& funcs);
+        bool is_manager_empty();
+        void wait_all_workers();
+        void prepare_and_start();
     };
 
 }; // namespace ras
 
 template <typename T>
 inline ras::RingQueue<T>::RingQueue(size_t max_size)
-    : arr_(max_size)
+    : arr_(max_size),
+      atomic_size_(size_)
 {
 }
 
 template <typename T>
 inline bool ras::RingQueue<T>::pop(T& target)
 {
-    if (size_ == 0)
+    if (atomic_size_ == 0)
     {
         return false;
     }
@@ -89,14 +96,14 @@ inline bool ras::RingQueue<T>::pop(T& target)
     target = arr_[front_];
     front_++;
     front_ %= capacity();
-    size_--;
+    atomic_size_--;
     return true;
 }
 
 template <typename T>
 inline bool ras::RingQueue<T>::push(const T& elem)
 {
-    if (size_ >= capacity())
+    if (atomic_size_ == capacity())
     {
         return false;
     }
@@ -104,7 +111,7 @@ inline bool ras::RingQueue<T>::push(const T& elem)
     arr_[back_] = elem;
     back_++;
     back_ %= capacity();
-    size_++;
+    atomic_size_++;
     return true;
 }
 
