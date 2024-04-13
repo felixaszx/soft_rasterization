@@ -8,6 +8,7 @@
 #include <functional>
 #include <thread>
 #include <future>
+#include <concepts>
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -25,7 +26,7 @@ namespace ras
 {
     using ClipPositon = glm::vec<3, double>;
 
-    template <typename ReturnType, typename IndexType, typename... AttributeTypes>
+    template <typename ReturnType = ClipPositon, typename IndexType = uint64_t, typename... AttributeTypes>
     std::vector<ReturnType> excute_vertex_shader(const std::function<ReturnType(AttributeTypes... arg)>& shader,
                                                  const std::vector<IndexType>& indices, //
                                                  size_t vertex_count,
